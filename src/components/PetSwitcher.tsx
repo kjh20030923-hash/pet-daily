@@ -97,7 +97,7 @@ const PencilIcon = () => (
 
 type FormMode = 'list' | 'add' | 'edit';
 
-export const PetSwitcher: React.FC<{ onEditProfile?: () => void }> = ({ onEditProfile }) => {
+export const PetSwitcher: React.FC<{ onEditProfile?: () => void; hideEditButton?: boolean }> = ({ onEditProfile, hideEditButton = false }) => {
   const { pets, currentPet, selectPet, addPet, updateCurrentPet } = useAppState();
   const [visible, setVisible] = useState(false);
   const [formMode, setFormMode] = useState<FormMode>('list');
@@ -182,9 +182,11 @@ export const PetSwitcher: React.FC<{ onEditProfile?: () => void }> = ({ onEditPr
           </TouchableOpacity>
           <Text style={styles.ageText}>{currentPet.birthday ? calculatePetAge(currentPet.birthday) : '添加生日'}</Text>
         </View>
-        <TouchableOpacity style={styles.editButton} onPress={handleEditProfile} activeOpacity={0.7} hitSlop={8} accessibilityLabel="编辑宠物资料">
-          <PencilIcon />
-        </TouchableOpacity>
+        {hideEditButton ? null : (
+          <TouchableOpacity style={styles.editButton} onPress={handleEditProfile} activeOpacity={0.7} hitSlop={8} accessibilityLabel="编辑宠物资料">
+            <PencilIcon />
+          </TouchableOpacity>
+        )}
       </View>
 
       <Modal visible={visible} transparent animationType="slide" onRequestClose={close}>

@@ -29,7 +29,7 @@ const iconMap: Record<keyof RootTabParamList, AppIconName> = {
 
 const labelMap: Record<keyof RootTabParamList, string> = {
   Home: '首页',
-  Expenses: '记账',
+  Expenses: '记录',
   Health: '健康',
   Profile: '我的',
 };
@@ -101,7 +101,7 @@ export const BottomTabs: React.FC = () => (
       screenOptions={{ headerShown: false, tabBarHideOnKeyboard: true }}
     >
       <Tab.Screen name="Home" component={CheckInScreen} options={{ tabBarLabel: '首页' }} />
-      <Tab.Screen name="Expenses" component={ExpensesScreen} options={{ tabBarLabel: '记账' }} />
+      <Tab.Screen name="Expenses" component={ExpensesScreen} options={{ tabBarLabel: '记录' }} />
       <Tab.Screen name="Health" component={HealthCenterScreen} options={{ tabBarLabel: '健康' }} />
       <Tab.Screen name="Profile" component={ProfileScreen} options={{ tabBarLabel: '我的' }} />
     </Tab.Navigator>

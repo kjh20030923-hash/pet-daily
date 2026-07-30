@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { AppIcon, AppIconName } from '../../components/AppIcon';
 import { ActivityRecord, ActivityType, BathRecord } from '../../types';
 import { colors, radius, shadow, spacing } from '../../theme';
 
@@ -10,6 +11,7 @@ type RoutineDefinition = {
   cycleDays: number;
   activityTypes?: ActivityType[];
   useBathRecord?: boolean;
+  iconName: AppIconName;
 };
 
 export type RoutineHistoryItem = {
@@ -28,10 +30,10 @@ export type RoutineCardData = RoutineDefinition & {
 };
 
 const ROUTINE_DEFINITIONS: RoutineDefinition[] = [
-  { id: 'bath', title: '洗澡', cycleDays: 30, useBathRecord: true },
-  { id: 'internal', title: '体内驱虫', cycleDays: 90, activityTypes: ['deworm-internal'] },
-  { id: 'external', title: '体外驱虫', cycleDays: 30, activityTypes: ['deworm-external'] },
-  { id: 'vaccine', title: '疫苗', cycleDays: 365, activityTypes: ['vaccine'] },
+  { id: 'bath', title: '洗澡', cycleDays: 30, useBathRecord: true, iconName: 'bath' },
+  { id: 'external', title: '体外驱虫', cycleDays: 30, activityTypes: ['deworm-external'], iconName: 'deworm' },
+  { id: 'internal', title: '体内驱虫', cycleDays: 90, activityTypes: ['deworm-internal'], iconName: 'deworm' },
+  { id: 'vaccine', title: '疫苗', cycleDays: 365, activityTypes: ['vaccine'], iconName: 'hospital' },
 ];
 
 const daysSince = (iso: string) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
@@ -104,39 +106,49 @@ export const RoutineStatusDashboard: React.FC<{
   }), [activities, bathRecords]);
 
   return (
-    <View style={styles.grid}>
+    <View style={styles.card}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>护理提醒</Text>
+        <Text style={styles.headerAction}>查看全部 ›</Text>
+      </View>
+      <View style={styles.grid}>
       {cards.map((card) => {
         const accent = card.state === 'overdue' ? colors.danger : card.state === 'due-soon' ? '#C98245' : colors.accentStrong;
         return (
           <Pressable
             key={card.id}
-            style={({ pressed }) => [styles.card, card.state === 'overdue' && styles.cardOverdue, pressed && styles.cardPressed]}
+            style={({ pressed }) => [styles.routineItem, pressed && styles.itemPressed]}
             onPress={() => onSelectRoutine?.(card)}
           >
-            <CircularProgressRing progress={card.progress} label={card.lastTime ? String(card.days) : '--'} color={accent} />
+            <View style={styles.itemIcon}>
+              <AppIcon name={card.iconName} size="small" tint={colors.textSecondary} />
+            </View>
             <View style={styles.copy}>
               <Text style={styles.title}>{card.title}</Text>
               <Text style={[styles.hint, card.state !== 'normal' && { color: accent }]}>{card.hint}</Text>
-              <Text style={styles.cycle}>建议周期 {card.cycleDays} 天</Text>
             </View>
           </Pressable>
         );
       })}
+      </View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  grid: { paddingHorizontal: spacing(2.5), flexDirection: 'row', flexWrap: 'wrap', gap: spacing(1) },
-  card: { width: '48.5%', minHeight: 150, padding: spacing(1.25), borderRadius: radius.large, borderWidth: 0.5, borderColor: colors.borderSoft, alignItems: 'flex-start', justifyContent: 'space-between', backgroundColor: colors.card, ...shadow.soft },
-  cardPressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
-  cardOverdue: { backgroundColor: '#FFF3F2' },
+  card: { marginHorizontal: spacing(2.5), padding: spacing(1.5), borderRadius: radius.large, borderWidth: 0.5, borderColor: colors.borderSoft, backgroundColor: colors.card, ...shadow.soft },
+  header: { marginBottom: spacing(0.5), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  headerTitle: { color: colors.textPrimary, fontSize: 17, fontWeight: '900' },
+  headerAction: { color: colors.textSecondary, fontSize: 12, fontWeight: '800' },
+  grid: { flexDirection: 'row', flexWrap: 'wrap' },
+  routineItem: { width: '50%', minHeight: 68, flexDirection: 'row', alignItems: 'center', paddingVertical: spacing(0.75), paddingRight: spacing(0.75) },
+  itemPressed: { opacity: 0.68 },
+  itemIcon: { width: 38, height: 38, marginRight: spacing(1), borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   ring: { width: 62, height: 62, alignItems: 'center', justifyContent: 'center' },
   ringSegment: { position: 'absolute', width: 3, height: 6, borderRadius: 2 },
   ringValue: { marginTop: -4, color: colors.textPrimary, fontSize: 19, fontWeight: '900' },
   ringUnit: { marginTop: -2, color: colors.textSecondary, fontSize: 9, fontWeight: '700' },
-  copy: { marginTop: spacing(1), width: '100%' },
+  copy: { flex: 1, minWidth: 0 },
   title: { color: colors.textPrimary, fontSize: 15, fontWeight: '900' },
-  hint: { marginTop: 6, color: colors.textSecondary, fontSize: 11, lineHeight: 16 },
-  cycle: { marginTop: 3, color: colors.textMuted, fontSize: 9 },
+  hint: { marginTop: 4, color: colors.textSecondary, fontSize: 11, lineHeight: 15 },
 });

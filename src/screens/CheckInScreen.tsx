@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
-import { RouteProp, useRoute } from '@react-navigation/native';
+import { CommonActions, RouteProp, useNavigation, useRoute } from '@react-navigation/native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppIcon } from '../components/AppIcon';
 import { CalendarLineIcon } from '../components/CalendarLineIcon';
@@ -30,7 +30,7 @@ import { DailyMedsDashboard } from '../features/medication/DailyMedsDashboard';
 import { getDailyMedicationTasks } from '../features/medication/medicationTasks';
 import { useAppState, useTimeline } from '../store';
 import { colors, radius, spacing } from '../theme';
-import { ActivityRecord, ActivityType, TimelineItem } from '../types';
+import { TimelineItem } from '../types';
 import { formatZhDate, formatZhDateTime } from '../utils/date';
 import { TimelineScreen } from './TimelineScreen';
 import type { RootTabParamList } from '../navigation/BottomTabs';
@@ -66,16 +66,9 @@ const getNextRoutineTime = (routine: RoutineCardData) => {
   return next.toISOString();
 };
 
-type DailyRecordGroup = {
-  id: 'feed' | 'movement';
-  title: string;
-  subtitle: string;
-  emptyText: string;
-  records: ActivityRecord[];
-};
-
 export const CheckInScreen: React.FC = () => {
   const route = useRoute<RouteProp<RootTabParamList, 'Home'>>();
+  const navigation = useNavigation();
   const {
     currentPet,
     activities,
@@ -94,7 +87,6 @@ export const CheckInScreen: React.FC = () => {
   const [recordVisible, setRecordVisible] = useState(false);
   const [diaryVisible, setDiaryVisible] = useState(false);
   const [selectedRoutine, setSelectedRoutine] = useState<RoutineCardData | null>(null);
-  const [selectedDailyGroup, setSelectedDailyGroup] = useState<DailyRecordGroup | null>(null);
   const [activeAction, setActiveAction] = useState<QuickActionConfig | null>(null);
   const [date, setDate] = useState(new Date());
   const [detail, setDetail] = useState('');
@@ -110,28 +102,30 @@ export const CheckInScreen: React.FC = () => {
     () => getDailyMedicationTasks(medicationPlans, medicationLogs),
     [medicationLogs, medicationPlans],
   );
-  const dailyRecordGroups = useMemo<DailyRecordGroup[]>(() => {
-    const byType = (types: ActivityType[]) => activities
-      .filter((record) => types.includes(record.type))
-      .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
-    const movementTypes: ActivityType[] = currentPet.kind === 'cat' ? ['litter'] : ['walk'];
+  const todayActivities = useMemo(() => activities.filter((record) => {
+    const value = new Date(record.time);
+    return value.toDateString() === new Date().toDateString();
+  }), [activities]);
+  const todayDraftCount = useMemo(() => todayItems.filter((item) => item.kind === 'draft').length, [todayItems]);
+  const feedTodayCount = todayActivities.filter((record) => record.type === 'feed').length;
+  const walkTodayCount = todayActivities.filter((record) => currentPet.kind === 'cat' ? record.type === 'litter' : record.type === 'walk').length;
+  const bathCareText = useMemo(() => {
+    const lastBath = bathRecords[0]?.time;
+    if (!lastBath) return '洗澡待记录';
+    const days = Math.max(0, Math.floor((Date.now() - new Date(lastBath).getTime()) / 86_400_000));
+    const remaining = 30 - days;
+    return remaining >= 0 ? `洗澡还有 ${remaining} 天` : `洗澡已逾期 ${Math.abs(remaining)} 天`;
+  }, [bathRecords]);
+  const quickShortcuts = useMemo(() => {
+    const findAction = (matcher: (action: QuickActionConfig) => boolean) => quickActions.find(matcher);
     return [
-      {
-        id: 'feed',
-        title: '饮食记录',
-        subtitle: '喂食、份量和照片',
-        emptyText: '还没有饮食记录',
-        records: byType(['feed']),
-      },
-      {
-        id: 'movement',
-        title: currentPet.kind === 'cat' ? '猫砂观察' : '遛狗记录',
-        subtitle: currentPet.kind === 'cat' ? '铲屎和状态观察' : '外出地点和时长',
-        emptyText: currentPet.kind === 'cat' ? '还没有猫砂记录' : '还没有遛狗记录',
-        records: byType(movementTypes),
-      },
+      { id: 'feed', label: '饮食', icon: 'feed' as const, action: findAction((action) => action.actionType === 'feed') },
+      { id: 'walk', label: currentPet.kind === 'cat' ? '猫砂' : '遛狗', icon: currentPet.kind === 'cat' ? 'litter' as const : 'walk' as const, action: findAction((action) => currentPet.kind === 'cat' ? action.actionType === 'litter' : action.actionType === 'walk') },
+      { id: 'poop', label: '便便', icon: 'litter' as const, action: findAction((action) => action.actionType === 'litter') },
+      { id: 'weight', label: '体重', icon: 'weight' as const, action: undefined },
+      { id: 'diary', label: '日记', icon: 'diary' as const, action: findAction((action) => action.actionType === 'diary') },
     ];
-  }, [activities, currentPet.kind]);
+  }, [currentPet.kind, quickActions]);
 
   React.useEffect(() => {
     if (route.params?.quickAddToken) setQuickAddVisible(true);
@@ -198,7 +192,7 @@ export const CheckInScreen: React.FC = () => {
     <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
       <ScrollView contentContainerStyle={styles.page} showsVerticalScrollIndicator={false}>
         <View style={styles.topBar}>
-          <PetSwitcher />
+          <PetSwitcher hideEditButton />
           <Pressable style={styles.calendarButton} onPress={() => setTimelineVisible(true)} hitSlop={12} accessibilityLabel="打开时光本">
             <CalendarLineIcon size={28} color={colors.textPrimary} />
             <Text style={styles.calendarText}>回忆</Text>
@@ -207,7 +201,46 @@ export const CheckInScreen: React.FC = () => {
 
         <View style={styles.hero}>
           <Text style={styles.title}>{currentPet.name}今天怎么样？</Text>
-          <Text style={styles.subtitle}>待办、护理和今日动态都在这里。</Text>
+          <Text style={styles.subtitle}>记录饮食、遛狗、护理和今天的小事。</Text>
+        </View>
+
+        <View style={styles.quickStrip}>
+          {quickShortcuts.map((shortcut) => (
+            <Pressable
+              key={shortcut.id}
+              style={({ pressed }) => [styles.quickPill, pressed && styles.quickPillPressed]}
+              onPress={() => {
+                if (shortcut.id === 'weight') {
+                  navigation.dispatch(CommonActions.navigate({ name: 'Health' }));
+                  return;
+                }
+                if (shortcut.action) handleAction(shortcut.action);
+              }}
+            >
+              <View style={styles.quickPillIcon}>
+                <AppIcon name={shortcut.icon} size="small" tint={colors.accentStrong} />
+              </View>
+              <Text style={styles.quickPillText}>{shortcut.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <View style={styles.overviewCard}>
+          <View style={styles.overviewHeader}>
+            <View>
+              <Text style={styles.overviewTitle}>今日概览</Text>
+              <Text style={styles.overviewSubtitle}>{todayItems.length ? '今天已经留下记录啦' : '今天还没有完整记录哦，快来记录吧'}</Text>
+            </View>
+            <Pressable style={styles.overviewAction} onPress={() => setQuickAddVisible(true)}>
+              <Text style={styles.overviewActionText}>去记录 ›</Text>
+            </Pressable>
+          </View>
+          <View style={styles.overviewStats}>
+            <OverviewStat icon="feed" label="饮食" value={feedTodayCount ? `${feedTodayCount} 条` : '未记录'} />
+            <OverviewStat icon={currentPet.kind === 'cat' ? 'litter' : 'walk'} label={currentPet.kind === 'cat' ? '猫砂' : '遛狗'} value={walkTodayCount ? `${walkTodayCount} 条` : '未记录'} />
+            <OverviewStat icon="diary" label="日记" value={todayDraftCount ? `${todayDraftCount} 条记录` : '未记录'} highlight={todayDraftCount > 0} />
+            <OverviewStat icon="bath" label="护理" value={bathCareText} highlight={bathCareText.includes('还有')} danger={bathCareText.includes('逾期')} />
+          </View>
         </View>
 
         {todayMedicationTasks.length > 0 ? (
@@ -220,22 +253,8 @@ export const CheckInScreen: React.FC = () => {
           </>
         ) : null}
 
-        <View style={[styles.sectionHeader, todayMedicationTasks.length === 0 && styles.firstSectionHeader]}>
-          <Text style={styles.sectionTitle}>护理状态</Text>
-          <Text style={styles.sectionMeta}>点击查看详情</Text>
-        </View>
         <View style={styles.routineScroller}>
           <RoutineStatusDashboard activities={activities} bathRecords={bathRecords} onSelectRoutine={setSelectedRoutine} />
-        </View>
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>日常记录</Text>
-          <Text style={styles.sectionMeta}>饮食与活动</Text>
-        </View>
-        <View style={styles.dailyGrid}>
-          {dailyRecordGroups.map((group) => (
-            <DailyRecordCard key={group.id} group={group} onPress={() => setSelectedDailyGroup(group)} />
-          ))}
         </View>
 
         <View style={styles.sectionHeader}>
@@ -330,33 +349,6 @@ export const CheckInScreen: React.FC = () => {
           </Sheet>
         ) : null}
       </Modal>
-
-      <Modal visible={Boolean(selectedDailyGroup)} transparent animationType="slide" onRequestClose={() => setSelectedDailyGroup(null)}>
-        {selectedDailyGroup ? (
-          <Sheet title={selectedDailyGroup.title} onClose={() => setSelectedDailyGroup(null)}>
-            <Text style={styles.dailyDetailHint}>{selectedDailyGroup.subtitle}</Text>
-            {selectedDailyGroup.records.length === 0 ? (
-              <View style={styles.historyEmpty}>
-                <Text style={styles.historyEmptyText}>{selectedDailyGroup.emptyText}。点击底部 + 号添加后，会集中出现在这里。</Text>
-              </View>
-            ) : selectedDailyGroup.records.map((record, index) => (
-              <View key={record.id} style={[styles.dailyRecordRow, index > 0 && styles.historyBorder]}>
-                {record.imageUri ? (
-                  <Image source={{ uri: record.imageUri }} style={styles.dailyRecordImage} />
-                ) : (
-                  <View style={styles.dailyRecordPlaceholder}>
-                    <AppIcon name={record.type === 'feed' ? 'feed' : record.type === 'litter' ? 'litter' : 'walk'} size="small" tint={colors.accentStrong} />
-                  </View>
-                )}
-                <View style={styles.dailyRecordBody}>
-                  <Text style={styles.dailyRecordTime}>{formatZhDateTime(record.time)}</Text>
-                  <Text style={styles.dailyRecordText}>{record.detail || '未填写详情'}</Text>
-                </View>
-              </View>
-            ))}
-          </Sheet>
-        ) : null}
-      </Modal>
     </SafeAreaView>
   );
 };
@@ -419,33 +411,19 @@ const DateTimeControl: React.FC<{ date: Date; onChange: (date: Date) => void }> 
   </View>
 );
 
-const DailyRecordCard: React.FC<{ group: DailyRecordGroup; onPress: () => void }> = ({ group, onPress }) => {
-  const latest = group.records[0];
-  const photos = group.records.filter((record) => record.imageUri).slice(0, 3);
-  return (
-    <Pressable style={({ pressed }) => [styles.dailyCard, pressed && styles.dailyCardPressed]} onPress={onPress}>
-      <View style={styles.dailyCardHeader}>
-        <View>
-          <Text style={styles.dailyCardTitle}>{group.title}</Text>
-          <Text style={styles.dailyCardMeta}>{group.records.length} 条记录</Text>
-        </View>
-        <Text style={styles.dailyCardChevron}>›</Text>
-      </View>
-      {photos.length > 0 ? (
-        <View style={styles.dailyPhotoStrip}>
-          {photos.map((record) => (
-            <Image key={record.id} source={{ uri: record.imageUri }} style={styles.dailyPhotoThumb} />
-          ))}
-        </View>
-      ) : (
-        <View style={styles.dailyEmptyThumb}>
-          <Text style={styles.dailyEmptyThumbText}>暂无照片</Text>
-        </View>
-      )}
-      <Text style={styles.dailyLatest} numberOfLines={2}>{latest?.detail || group.emptyText}</Text>
-    </Pressable>
-  );
-};
+const OverviewStat: React.FC<{
+  icon: React.ComponentProps<typeof AppIcon>['name'];
+  label: string;
+  value: string;
+  highlight?: boolean;
+  danger?: boolean;
+}> = ({ icon, label, value, highlight, danger }) => (
+  <View style={styles.overviewStat}>
+    <View style={styles.overviewIcon}><AppIcon name={icon} size="small" tint={danger ? colors.danger : colors.accentStrong} /></View>
+    <Text style={styles.overviewStatLabel}>{label}</Text>
+    <Text style={[styles.overviewStatValue, highlight && styles.overviewStatHighlight, danger && styles.overviewStatDanger]} numberOfLines={1}>{value}</Text>
+  </View>
+);
 
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
@@ -457,23 +435,29 @@ const styles = StyleSheet.create({
   eyebrow: { color: colors.accentStrong, fontSize: 12, fontWeight: '800', letterSpacing: 1.4 },
   title: { maxWidth: 320, color: colors.textPrimary, fontSize: 24, lineHeight: 31, fontWeight: '900' },
   subtitle: { marginTop: 5, color: colors.textSecondary, fontSize: 13, lineHeight: 19 },
+  quickStrip: { marginTop: spacing(2), flexDirection: 'row', flexWrap: 'wrap', gap: spacing(0.75) },
+  quickPill: { minHeight: 42, paddingLeft: 6, paddingRight: spacing(1.1), borderRadius: radius.pill, borderWidth: 0.5, borderColor: colors.borderSoft, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card },
+  quickPillPressed: { opacity: 0.7, transform: [{ scale: 0.98 }] },
+  quickPillIcon: { width: 32, height: 32, marginRight: 3, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSoft },
+  quickPillText: { color: colors.textPrimary, fontSize: 13, fontWeight: '900' },
+  overviewCard: { marginTop: spacing(2), padding: spacing(1.5), borderRadius: 24, borderWidth: 0.5, borderColor: '#F1E1CA', backgroundColor: '#FFF6E8' },
+  overviewHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  overviewTitle: { color: colors.textPrimary, fontSize: 18, fontWeight: '900' },
+  overviewSubtitle: { marginTop: 6, maxWidth: 220, color: colors.textSecondary, fontSize: 12, lineHeight: 17 },
+  overviewAction: { minHeight: 34, paddingHorizontal: spacing(1), borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.72)' },
+  overviewActionText: { color: colors.accentStrong, fontSize: 12, fontWeight: '900' },
+  overviewStats: { marginTop: spacing(1.5), paddingVertical: spacing(1), borderRadius: 18, flexDirection: 'row', backgroundColor: colors.card },
+  overviewStat: { flex: 1, minWidth: 0, alignItems: 'center', paddingHorizontal: 3, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.borderSoft },
+  overviewIcon: { width: 34, height: 34, borderRadius: 17, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSoft },
+  overviewStatLabel: { marginTop: 6, color: colors.textPrimary, fontSize: 12, fontWeight: '900' },
+  overviewStatValue: { marginTop: 4, color: colors.textSecondary, fontSize: 10, fontWeight: '800' },
+  overviewStatHighlight: { color: colors.accentStrong },
+  overviewStatDanger: { color: colors.danger },
   sectionHeader: { marginTop: spacing(3), marginBottom: spacing(1.25), flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   firstSectionHeader: { marginTop: spacing(2.25) },
   sectionTitle: { color: colors.textPrimary, fontSize: 17, fontWeight: '900' },
   sectionMeta: { color: colors.textSecondary, fontSize: 11 },
-  routineScroller: { marginHorizontal: -spacing(2.5) },
-  dailyGrid: { flexDirection: 'row', gap: spacing(1) },
-  dailyCard: { flex: 1, minHeight: 172, padding: spacing(1.25), borderRadius: radius.large, borderWidth: 0.5, borderColor: colors.borderSoft, backgroundColor: colors.card },
-  dailyCardPressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
-  dailyCardHeader: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  dailyCardTitle: { color: colors.textPrimary, fontSize: 15, fontWeight: '900' },
-  dailyCardMeta: { marginTop: 4, color: colors.textSecondary, fontSize: 11 },
-  dailyCardChevron: { marginTop: -6, color: colors.textMuted, fontSize: 25 },
-  dailyPhotoStrip: { marginTop: spacing(1.25), height: 56, flexDirection: 'row' },
-  dailyPhotoThumb: { width: 56, height: 56, marginRight: -12, borderRadius: 16, borderWidth: 2, borderColor: colors.card, backgroundColor: colors.surface },
-  dailyEmptyThumb: { marginTop: spacing(1.25), height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
-  dailyEmptyThumbText: { color: colors.textMuted, fontSize: 11, fontWeight: '700' },
-  dailyLatest: { marginTop: spacing(1), color: colors.textSecondary, fontSize: 12, lineHeight: 17 },
+  routineScroller: { marginTop: spacing(2.5), marginHorizontal: -spacing(2.5) },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(45,52,47,0.28)' },
   keyboard: { width: '100%', maxHeight: '92%' },
   sheet: { maxHeight: '100%', backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
@@ -514,13 +498,6 @@ const styles = StyleSheet.create({
   historyMeta: { marginTop: 4, color: colors.textSecondary, fontSize: 11 },
   historyEmpty: { minHeight: 90, borderRadius: radius.medium, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
   historyEmptyText: { maxWidth: 260, color: colors.textSecondary, textAlign: 'center', fontSize: 12, lineHeight: 18 },
-  dailyDetailHint: { marginBottom: spacing(1), color: colors.textSecondary, fontSize: 12, lineHeight: 18 },
-  dailyRecordRow: { minHeight: 82, flexDirection: 'row', alignItems: 'center', paddingVertical: spacing(1) },
-  dailyRecordImage: { width: 62, height: 62, borderRadius: 18, backgroundColor: colors.surface },
-  dailyRecordPlaceholder: { width: 62, height: 62, borderRadius: 18, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSoft },
-  dailyRecordBody: { flex: 1, marginLeft: spacing(1.25) },
-  dailyRecordTime: { color: colors.textPrimary, fontSize: 13, fontWeight: '800' },
-  dailyRecordText: { marginTop: 5, color: colors.textSecondary, fontSize: 12, lineHeight: 18 },
   primaryButton: { marginTop: spacing(2), minHeight: 52, borderRadius: radius.medium, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentStrong },
   primaryText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
   quickAddHint: { color: colors.textSecondary, fontSize: 13 },

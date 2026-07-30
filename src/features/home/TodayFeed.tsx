@@ -27,8 +27,8 @@ export const TodayFeed: React.FC<{ items: TimelineItem[] }> = ({ items }) => {
     return (
       <View style={styles.empty}>
         <View style={styles.emptyDot} />
-        <Text style={styles.emptyTitle}>今天还没有记录</Text>
-        <Text style={styles.emptyText}>点击底部 + 号开始</Text>
+        <Text style={styles.emptyTitle}>今天还没有动态</Text>
+        <Text style={styles.emptyText}>记录一件小事，时间线就会从这里开始。</Text>
       </View>
     );
   }
@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.textPrimary },
   line: { width: StyleSheet.hairlineWidth, flex: 1, marginTop: 5, backgroundColor: '#D8D2CD' },
   content: { flex: 1, marginTop: -5, paddingBottom: spacing(2), color: colors.textPrimary, fontSize: 14, lineHeight: 20, fontWeight: '700' },
-  empty: { minHeight: 190, alignItems: 'center', justifyContent: 'center' },
+  empty: { minHeight: 128, alignItems: 'center', justifyContent: 'center' },
   emptyDot: { width: 9, height: 9, marginBottom: spacing(1.5), borderRadius: 5, backgroundColor: colors.accent },
   emptyTitle: { color: colors.textPrimary, fontSize: 15, fontWeight: '800' },
   emptyText: { marginTop: 7, color: colors.textSecondary, fontSize: 12 },

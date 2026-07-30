@@ -74,6 +74,16 @@ const diaryAction: QuickActionConfig = {
   actionType: 'diary',
 };
 
+const poopAction: QuickActionConfig = {
+  id: 'poop',
+  title: '便便',
+  hint: '便便状态',
+  iconName: 'litter',
+  color: colors.blueSoft,
+  actionType: 'litter',
+  placeholder: '便便状态、颜色或次数（可选）',
+};
+
 export const ACTION_CONFIG_MAP = {
   dog: [
     feedAction,
@@ -86,6 +96,7 @@ export const ACTION_CONFIG_MAP = {
       actionType: 'walk',
       placeholder: '去了哪里、走了多久（可选）',
     },
+    poopAction,
     bathAction,
     internalDewormAction,
     externalDewormAction,
