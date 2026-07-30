@@ -15,7 +15,7 @@ import {
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as ImagePicker from 'expo-image-picker';
 import { CommonActions, RouteProp, useNavigation, useRoute } from '@react-navigation/native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AppIcon } from '../components/AppIcon';
 import { CalendarLineIcon } from '../components/CalendarLineIcon';
 import { PetSwitcher } from '../components/PetSwitcher';
@@ -69,6 +69,7 @@ const getNextRoutineTime = (routine: RoutineCardData) => {
 export const CheckInScreen: React.FC = () => {
   const route = useRoute<RouteProp<RootTabParamList, 'Home'>>();
   const navigation = useNavigation();
+  const insets = useSafeAreaInsets();
   const {
     currentPet,
     activities,
@@ -269,17 +270,14 @@ export const CheckInScreen: React.FC = () => {
       </Modal>
 
       <Modal visible={quickAddVisible} transparent animationType="slide" onRequestClose={() => setQuickAddVisible(false)}>
-        <Sheet title="添加记录" onClose={() => setQuickAddVisible(false)}>
-          <Text style={styles.quickAddHint}>选择一种记录方式</Text>
-          <View style={styles.quickAddList}>
-            {quickActions.map((action) => (
-              <Pressable key={action.id} style={styles.quickAddRow} onPress={() => handleAction(action)}>
-                <View style={[styles.quickAddIcon, { backgroundColor: action.color }]}><AppIcon name={action.iconName} size="small" /></View>
-                <View style={styles.quickAddCopy}><Text style={styles.quickAddTitle}>{action.title}</Text><Text style={styles.quickAddMeta}>{action.hint}</Text></View>
-              </Pressable>
-            ))}
-          </View>
-        </Sheet>
+        <QuickAddSheet
+          petName={currentPet.name}
+          petKind={currentPet.kind}
+          actions={quickActions}
+          bottomInset={insets.bottom}
+          onAction={handleAction}
+          onClose={() => setQuickAddVisible(false)}
+        />
       </Modal>
 
       <Modal visible={bathVisible} transparent animationType="slide" onRequestClose={() => setBathVisible(false)}>
@@ -368,6 +366,208 @@ const Sheet: React.FC<React.PropsWithChildren<{ title: string; onClose: () => vo
 const PrimaryButton: React.FC<{ label: string; onPress: () => void }> = ({ label, onPress }) => (
   <Pressable style={styles.primaryButton} onPress={onPress}><Text style={styles.primaryText}>{label}</Text></Pressable>
 );
+
+type SoftIconName = 'food' | 'walk' | 'poop' | 'diary' | 'bath' | 'pill' | 'bug' | 'vaccine';
+
+const SoftLineIcon: React.FC<{ name: SoftIconName; color: string }> = ({ name, color }) => {
+  if (name === 'food') {
+    return (
+      <View style={styles.iconCanvas}>
+        <View style={[styles.foodBowl, { borderColor: color }]} />
+        <View style={[styles.foodBase, { backgroundColor: color }]} />
+        <View style={[styles.foodDot, { backgroundColor: color, left: 14 }]} />
+        <View style={[styles.foodDot, { backgroundColor: color, left: 22, top: 10 }]} />
+        <View style={[styles.foodDot, { backgroundColor: color, left: 30 }]} />
+      </View>
+    );
+  }
+  if (name === 'walk') {
+    return (
+      <View style={styles.iconCanvas}>
+        <View style={[styles.leashLoop, { borderColor: color }]} />
+        <View style={[styles.leashLine, { backgroundColor: color }]} />
+        <View style={[styles.leashHandle, { borderColor: color }]} />
+      </View>
+    );
+  }
+  if (name === 'poop') {
+    return (
+      <View style={styles.iconCanvas}>
+        <View style={[styles.poopLayerTop, { borderColor: color }]} />
+        <View style={[styles.poopLayerMid, { borderColor: color }]} />
+        <View style={[styles.poopLayerBottom, { borderColor: color }]} />
+        <View style={[styles.sparkDot, { backgroundColor: color, left: 7, top: 8 }]} />
+        <View style={[styles.sparkDot, { backgroundColor: color, right: 7, top: 15 }]} />
+      </View>
+    );
+  }
+  if (name === 'diary') {
+    return (
+      <View style={styles.iconCanvas}>
+        <View style={[styles.bookCover, { borderColor: color }]} />
+        <View style={[styles.bookLine, { backgroundColor: color, top: 16 }]} />
+        <View style={[styles.bookLine, { backgroundColor: color, top: 23 }]} />
+        <View style={[styles.bookHeart, { borderColor: color }]} />
+      </View>
+    );
+  }
+  if (name === 'bath') {
+    return (
+      <View style={styles.iconCanvas}>
+        <View style={[styles.bathTub, { borderColor: color }]} />
+        <View style={[styles.bathFoam, { borderColor: color, left: 13 }]} />
+        <View style={[styles.bathFoam, { borderColor: color, left: 23, top: 9 }]} />
+      </View>
+    );
+  }
+  if (name === 'pill') {
+    return (
+      <View style={styles.iconCanvas}>
+        <View style={[styles.pill, { borderColor: color }]} />
+        <View style={[styles.pillDivider, { backgroundColor: color }]} />
+      </View>
+    );
+  }
+  if (name === 'bug') {
+    return (
+      <View style={styles.iconCanvas}>
+        <View style={[styles.bugBody, { borderColor: color }]} />
+        <View style={[styles.bugHead, { borderColor: color }]} />
+        <View style={[styles.bugLeg, { backgroundColor: color, left: 8, transform: [{ rotate: '-28deg' }] }]} />
+        <View style={[styles.bugLeg, { backgroundColor: color, right: 8, transform: [{ rotate: '28deg' }] }]} />
+      </View>
+    );
+  }
+  return (
+    <View style={styles.iconCanvas}>
+      <View style={[styles.syringeBody, { borderColor: color }]} />
+      <View style={[styles.syringeNeedle, { backgroundColor: color }]} />
+      <View style={[styles.syringePlunger, { backgroundColor: color }]} />
+    </View>
+  );
+};
+
+const SectionLabel: React.FC<{ dotColor: string; title: string; subtitle: string }> = ({ dotColor, title, subtitle }) => (
+  <View style={styles.quickSectionHeader}>
+    <View style={[styles.quickSectionDot, { backgroundColor: dotColor }]} />
+    <View>
+      <Text style={styles.quickSectionTitle}>{title}</Text>
+      <Text style={styles.quickSectionSubtitle}>{subtitle}</Text>
+    </View>
+  </View>
+);
+
+const QuickAddSheet: React.FC<{
+  petName: string;
+  petKind: 'dog' | 'cat' | 'other';
+  actions: readonly QuickActionConfig[];
+  bottomInset: number;
+  onAction: (action: QuickActionConfig) => void;
+  onClose: () => void;
+}> = ({ petName, petKind, actions, bottomInset, onAction, onClose }) => {
+  const findAction = (matcher: (action: QuickActionConfig) => boolean) => actions.find(matcher);
+  const commonItems = [
+    {
+      key: 'feed',
+      title: '饮食记录',
+      description: '记录食物、分量和照片',
+      icon: 'food' as const,
+      iconColor: '#D28A1E',
+      iconBg: '#FFF0D9',
+      action: findAction((action) => action.actionType === 'feed'),
+    },
+    {
+      key: 'walk',
+      title: petKind === 'cat' ? '猫砂记录' : '遛狗记录',
+      description: petKind === 'cat' ? '记录状态、次数和健康' : '记录外出、时长和活动',
+      icon: petKind === 'cat' ? 'poop' as const : 'walk' as const,
+      iconColor: petKind === 'cat' ? '#4A90D9' : '#39A56A',
+      iconBg: petKind === 'cat' ? '#E7F1FF' : '#E5F6EC',
+      action: findAction((action) => petKind === 'cat' ? action.actionType === 'litter' : action.actionType === 'walk'),
+    },
+    {
+      key: 'poop',
+      title: '便便记录',
+      description: '记录状态、次数和健康',
+      icon: 'poop' as const,
+      iconColor: '#4A90D9',
+      iconBg: '#E7F1FF',
+      action: findAction((action) => action.id === 'poop') ?? findAction((action) => action.actionType === 'litter'),
+    },
+    {
+      key: 'diary',
+      title: '写日记',
+      description: '记录今天的小事和心情',
+      icon: 'diary' as const,
+      iconColor: '#D96F8C',
+      iconBg: '#FFE8EE',
+      action: findAction((action) => action.actionType === 'diary'),
+    },
+  ].filter((item) => Boolean(item.action));
+  const careItems = [
+    { key: 'bath', title: '洗澡', icon: 'bath' as const, iconColor: '#4C8FBF', iconBg: '#E8F3FA', action: findAction((action) => action.actionType === 'bath') },
+    { key: 'internal', title: '体内驱虫', icon: 'pill' as const, iconColor: '#D6903D', iconBg: '#FFF1DE', action: findAction((action) => action.actionType === 'deworm-internal') },
+    { key: 'external', title: '体外驱虫', icon: 'bug' as const, iconColor: '#49A978', iconBg: '#E7F6EE', action: findAction((action) => action.actionType === 'deworm-external') },
+    { key: 'vaccine', title: '疫苗', icon: 'vaccine' as const, iconColor: '#9B6CD9', iconBg: '#F0E8FF', action: findAction((action) => action.actionType === 'vaccine') },
+  ].filter((item) => Boolean(item.action));
+
+  return (
+    <View style={styles.quickBackdrop}>
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+      <KeyboardAvoidingView style={styles.quickKeyboard} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <View style={[styles.quickSheet, { paddingBottom: Math.max(bottomInset, 18) }]}>
+          <View style={styles.sheetHandle} />
+          <ScrollView contentContainerStyle={styles.quickSheetContent} showsVerticalScrollIndicator={false}>
+            <View style={styles.quickHeader}>
+              <View>
+                <Text style={styles.quickTitle}>添加记录</Text>
+                <Text style={styles.quickSubtitle}>今天想记录{petName}的什么？</Text>
+              </View>
+              <Pressable onPress={onClose} hitSlop={12}>
+                <Text style={styles.quickCancel}>取消</Text>
+              </Pressable>
+            </View>
+
+            <SectionLabel dotColor="#F3A43B" title="常用记录" subtitle={`日常记录${petName}的生活点滴`} />
+            <View style={styles.commonList}>
+              {commonItems.map((item) => (
+                <Pressable key={item.key} style={({ pressed }) => [styles.commonCard, pressed && styles.commonCardPressed]} onPress={() => item.action && onAction(item.action)}>
+                  <View style={[styles.commonIconBox, { backgroundColor: item.iconBg }]}>
+                    <SoftLineIcon name={item.icon} color={item.iconColor} />
+                  </View>
+                  <View style={styles.commonCopy}>
+                    <Text style={styles.commonTitle}>{item.title}</Text>
+                    <Text style={styles.commonDescription}>{item.description}</Text>
+                  </View>
+                  <Text style={styles.commonArrow}>›</Text>
+                </Pressable>
+              ))}
+            </View>
+
+            <View style={styles.quickDivider} />
+            <SectionLabel dotColor="#D99A5F" title="护理提醒" subtitle="护理记录，系统会帮你记住下次时间" />
+            <View style={styles.careGrid}>
+              {careItems.map((item) => (
+                <Pressable key={item.key} style={({ pressed }) => [styles.careCard, pressed && styles.commonCardPressed]} onPress={() => item.action && onAction(item.action)}>
+                  <View style={[styles.careIconBox, { backgroundColor: item.iconBg }]}>
+                    <SoftLineIcon name={item.icon} color={item.iconColor} />
+                  </View>
+                  <Text style={styles.careTitle}>{item.title}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <View style={styles.pawDecoration}>
+              <View style={styles.pawDotLarge} />
+              <View style={[styles.pawDotSmall, { left: 18, top: 6 }]} />
+              <View style={[styles.pawDotSmall, { left: 31, top: 9 }]} />
+              <View style={[styles.pawDotSmall, { left: 25, top: -3 }]} />
+            </View>
+          </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
+    </View>
+  );
+};
 
 const DateTimeControl: React.FC<{ date: Date; onChange: (date: Date) => void }> = ({ date, onChange }) => (
   <View style={styles.dateTimeCard}>
@@ -459,12 +659,92 @@ const styles = StyleSheet.create({
   sectionMeta: { color: colors.textSecondary, fontSize: 11 },
   routineScroller: { marginTop: spacing(2.5), marginHorizontal: -spacing(2.5) },
   backdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(45,52,47,0.28)' },
+  quickBackdrop: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.38)' },
   keyboard: { width: '100%', maxHeight: '92%' },
+  quickKeyboard: { width: '100%', maxHeight: '78%' },
   sheet: { maxHeight: '100%', backgroundColor: colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24 },
+  quickSheet: { maxHeight: '100%', borderTopLeftRadius: 28, borderTopRightRadius: 28, backgroundColor: '#FFFDF9', overflow: 'hidden' },
+  sheetHandle: { width: 42, height: 5, marginTop: 12, marginBottom: 4, borderRadius: 3, alignSelf: 'center', backgroundColor: '#D5D0CB' },
   sheetContent: { paddingHorizontal: spacing(2.5), paddingTop: spacing(2.5), paddingBottom: spacing(5) },
+  quickSheetContent: { paddingHorizontal: spacing(2.5), paddingTop: spacing(1.25), paddingBottom: spacing(2.5) },
   sheetHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing(1.5) },
   sheetTitle: { color: colors.textPrimary, fontSize: 21, fontWeight: '900' },
   cancel: { color: colors.textSecondary, fontSize: 14, fontWeight: '700' },
+  quickHeader: { marginBottom: spacing(2.5), flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
+  quickTitle: { color: '#2D211C', fontSize: 28, lineHeight: 34, fontWeight: '900' },
+  quickSubtitle: { marginTop: 8, color: '#7C6F68', fontSize: 15, lineHeight: 21, fontWeight: '500' },
+  quickCancel: { marginTop: 10, color: '#7A6A61', fontSize: 16, fontWeight: '700' },
+  quickSectionHeader: { marginBottom: spacing(1.25), flexDirection: 'row', alignItems: 'flex-start' },
+  quickSectionDot: { width: 9, height: 9, marginTop: 7, marginRight: spacing(1), borderRadius: 5 },
+  quickSectionTitle: { color: '#33241F', fontSize: 18, lineHeight: 23, fontWeight: '900' },
+  quickSectionSubtitle: { marginTop: 4, color: '#7C6F68', fontSize: 14, lineHeight: 19 },
+  commonList: { gap: spacing(1.1) },
+  commonCard: {
+    minHeight: 78,
+    paddingHorizontal: spacing(1.5),
+    paddingVertical: spacing(1.25),
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#EFE7DE',
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFFDF9',
+    shadowColor: '#5A3C28',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.04,
+    shadowRadius: 16,
+    elevation: 1,
+  },
+  commonCardPressed: { opacity: 0.72, transform: [{ scale: 0.985 }] },
+  commonIconBox: { width: 52, height: 52, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  commonCopy: { flex: 1, marginLeft: spacing(1.4), minWidth: 0 },
+  commonTitle: { color: '#33241F', fontSize: 17, lineHeight: 22, fontWeight: '900' },
+  commonDescription: { marginTop: 4, color: '#7C6F68', fontSize: 13, lineHeight: 18 },
+  commonArrow: { marginLeft: spacing(1), color: 'rgba(122,106,97,0.78)', fontSize: 34, lineHeight: 38, fontWeight: '500' },
+  quickDivider: { height: StyleSheet.hairlineWidth, marginTop: spacing(2), marginBottom: spacing(2), backgroundColor: '#EFE7DE' },
+  careGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing(1) },
+  careCard: {
+    flexGrow: 1,
+    flexBasis: '22%',
+    minWidth: 74,
+    minHeight: 96,
+    paddingVertical: spacing(1.1),
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#EFE7DE',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FFFDF9',
+  },
+  careIconBox: { width: 48, height: 48, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  careTitle: { marginTop: 8, color: '#33241F', fontSize: 14, fontWeight: '800' },
+  pawDecoration: { height: 28, marginTop: spacing(1.5), opacity: 0.45 },
+  pawDotLarge: { position: 'absolute', left: 7, top: 11, width: 13, height: 11, borderRadius: 7, backgroundColor: '#D7B592', transform: [{ rotate: '-18deg' }] },
+  pawDotSmall: { position: 'absolute', width: 7, height: 7, borderRadius: 4, backgroundColor: '#D7B592' },
+  iconCanvas: { width: 42, height: 42, position: 'relative' },
+  foodBowl: { position: 'absolute', left: 9, top: 18, width: 25, height: 14, borderWidth: 2, borderTopWidth: 0, borderBottomLeftRadius: 12, borderBottomRightRadius: 12 },
+  foodBase: { position: 'absolute', left: 13, top: 32, width: 17, height: 2, borderRadius: 1 },
+  foodDot: { position: 'absolute', top: 12, width: 5, height: 5, borderRadius: 3 },
+  leashLoop: { position: 'absolute', left: 7, top: 10, width: 19, height: 12, borderWidth: 2, borderRadius: 10, transform: [{ rotate: '18deg' }] },
+  leashLine: { position: 'absolute', left: 20, top: 21, width: 18, height: 2, borderRadius: 1, transform: [{ rotate: '-28deg' }] },
+  leashHandle: { position: 'absolute', left: 27, top: 8, width: 8, height: 8, borderWidth: 2, borderRadius: 5 },
+  poopLayerTop: { position: 'absolute', left: 17, top: 9, width: 10, height: 8, borderWidth: 2, borderRadius: 8 },
+  poopLayerMid: { position: 'absolute', left: 13, top: 17, width: 18, height: 9, borderWidth: 2, borderRadius: 10 },
+  poopLayerBottom: { position: 'absolute', left: 9, top: 26, width: 26, height: 8, borderWidth: 2, borderRadius: 12 },
+  sparkDot: { position: 'absolute', width: 4, height: 4, borderRadius: 2 },
+  bookCover: { position: 'absolute', left: 10, top: 8, width: 23, height: 28, borderWidth: 2, borderRadius: 5 },
+  bookLine: { position: 'absolute', left: 16, width: 11, height: 2, borderRadius: 1 },
+  bookHeart: { position: 'absolute', left: 18, top: 26, width: 7, height: 7, borderLeftWidth: 2, borderBottomWidth: 2, transform: [{ rotate: '-45deg' }] },
+  bathTub: { position: 'absolute', left: 8, top: 20, width: 27, height: 13, borderWidth: 2, borderTopWidth: 0, borderBottomLeftRadius: 8, borderBottomRightRadius: 8 },
+  bathFoam: { position: 'absolute', top: 11, width: 9, height: 9, borderWidth: 2, borderRadius: 5 },
+  pill: { position: 'absolute', left: 10, top: 12, width: 24, height: 16, borderWidth: 2, borderRadius: 9, transform: [{ rotate: '-42deg' }] },
+  pillDivider: { position: 'absolute', left: 20, top: 18, width: 2, height: 13, borderRadius: 1, transform: [{ rotate: '48deg' }] },
+  bugBody: { position: 'absolute', left: 14, top: 15, width: 15, height: 19, borderWidth: 2, borderRadius: 9 },
+  bugHead: { position: 'absolute', left: 16, top: 8, width: 11, height: 10, borderWidth: 2, borderRadius: 7 },
+  bugLeg: { position: 'absolute', top: 24, width: 11, height: 2, borderRadius: 1 },
+  syringeBody: { position: 'absolute', left: 13, top: 12, width: 18, height: 10, borderWidth: 2, borderRadius: 4, transform: [{ rotate: '-38deg' }] },
+  syringeNeedle: { position: 'absolute', left: 27, top: 26, width: 12, height: 2, borderRadius: 1, transform: [{ rotate: '-38deg' }] },
+  syringePlunger: { position: 'absolute', left: 7, top: 9, width: 9, height: 2, borderRadius: 1, transform: [{ rotate: '-38deg' }] },
   input: { marginTop: spacing(1), minHeight: 52, borderRadius: radius.medium, paddingHorizontal: spacing(1.5), backgroundColor: colors.surface, color: colors.textPrimary, fontSize: 15 },
   diaryInput: { minHeight: 150, paddingTop: spacing(1.5), textAlignVertical: 'top' },
   photoPicker: { marginTop: spacing(1), minHeight: 92, borderRadius: radius.medium, overflow: 'hidden', borderWidth: 0.5, borderColor: colors.borderSoft, backgroundColor: colors.surface },
