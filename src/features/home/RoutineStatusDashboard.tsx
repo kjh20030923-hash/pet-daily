@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { ActivityRecord, ActivityType, BathRecord } from '../../types';
 import { colors, radius, shadow, spacing } from '../../theme';
 
@@ -104,7 +104,7 @@ export const RoutineStatusDashboard: React.FC<{
   }), [activities, bathRecords]);
 
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+    <View style={styles.grid}>
       {cards.map((card) => {
         const accent = card.state === 'overdue' ? colors.danger : card.state === 'due-soon' ? '#C98245' : colors.accentStrong;
         return (
@@ -122,20 +122,20 @@ export const RoutineStatusDashboard: React.FC<{
           </Pressable>
         );
       })}
-    </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  row: { paddingHorizontal: spacing(2.5), paddingVertical: 3, gap: spacing(1.25) },
-  card: { width: 228, minHeight: 104, paddingHorizontal: spacing(1.25), borderRadius: radius.large, borderWidth: 0.5, borderColor: colors.borderSoft, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, ...shadow.soft },
+  grid: { paddingHorizontal: spacing(2.5), flexDirection: 'row', flexWrap: 'wrap', gap: spacing(1) },
+  card: { width: '48.5%', minHeight: 150, padding: spacing(1.25), borderRadius: radius.large, borderWidth: 0.5, borderColor: colors.borderSoft, alignItems: 'flex-start', justifyContent: 'space-between', backgroundColor: colors.card, ...shadow.soft },
   cardPressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
   cardOverdue: { backgroundColor: '#FFF3F2' },
   ring: { width: 62, height: 62, alignItems: 'center', justifyContent: 'center' },
   ringSegment: { position: 'absolute', width: 3, height: 6, borderRadius: 2 },
   ringValue: { marginTop: -4, color: colors.textPrimary, fontSize: 19, fontWeight: '900' },
   ringUnit: { marginTop: -2, color: colors.textSecondary, fontSize: 9, fontWeight: '700' },
-  copy: { flex: 1, marginLeft: spacing(1.25) },
+  copy: { marginTop: spacing(1), width: '100%' },
   title: { color: colors.textPrimary, fontSize: 15, fontWeight: '900' },
   hint: { marginTop: 6, color: colors.textSecondary, fontSize: 11, lineHeight: 16 },
   cycle: { marginTop: 3, color: colors.textMuted, fontSize: 9 },
