@@ -22,17 +22,47 @@ import {
   isActivityAction,
   QuickActionConfig,
 } from '../features/checkin/actionConfig';
-import { RoutineStatusDashboard } from '../features/home/RoutineStatusDashboard';
+import { RoutineCardData, RoutineStatusDashboard } from '../features/home/RoutineStatusDashboard';
 import { TodayFeed } from '../features/home/TodayFeed';
 import { DailyMedsDashboard } from '../features/medication/DailyMedsDashboard';
 import { getDailyMedicationTasks } from '../features/medication/medicationTasks';
 import { useAppState, useTimeline } from '../store';
 import { colors, radius, spacing } from '../theme';
 import { TimelineItem } from '../types';
+import { formatZhDate, formatZhDateTime } from '../utils/date';
 import { TimelineScreen } from './TimelineScreen';
 import type { RootTabParamList } from '../navigation/BottomTabs';
 
 const itemTime = (item: TimelineItem) => item.kind === 'footprint' ? item.date : item.kind === 'medication' ? item.takenAt : item.time;
+
+const toDateInputValue = (value: Date) =>
+  `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`;
+
+const toTimeInputValue = (value: Date) =>
+  `${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}`;
+
+const applyDatePart = (current: Date, value: string) => {
+  const [year, month, day] = value.split('-').map(Number);
+  if (!year || !month || !day) return current;
+  const next = new Date(current);
+  next.setFullYear(year, month - 1, day);
+  return next;
+};
+
+const applyTimePart = (current: Date, value: string) => {
+  const [hour, minute] = value.split(':').map(Number);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return current;
+  const next = new Date(current);
+  next.setHours(Math.min(23, Math.max(0, hour)), Math.min(59, Math.max(0, minute)), 0, 0);
+  return next;
+};
+
+const getNextRoutineTime = (routine: RoutineCardData) => {
+  if (!routine.lastTime) return undefined;
+  const next = new Date(routine.lastTime);
+  next.setDate(next.getDate() + routine.cycleDays);
+  return next.toISOString();
+};
 
 export const CheckInScreen: React.FC = () => {
   const route = useRoute<RouteProp<RootTabParamList, 'Home'>>();
@@ -53,6 +83,7 @@ export const CheckInScreen: React.FC = () => {
   const [bathVisible, setBathVisible] = useState(false);
   const [recordVisible, setRecordVisible] = useState(false);
   const [diaryVisible, setDiaryVisible] = useState(false);
+  const [selectedRoutine, setSelectedRoutine] = useState<RoutineCardData | null>(null);
   const [activeAction, setActiveAction] = useState<QuickActionConfig | null>(null);
   const [date, setDate] = useState(new Date());
   const [detail, setDetail] = useState('');
@@ -109,7 +140,7 @@ export const CheckInScreen: React.FC = () => {
       Alert.alert('先写下一点内容吧');
       return;
     }
-    addDraft({ id: `${Date.now()}`, content: diary.trim(), time: new Date().toISOString() });
+    addDraft({ id: `${Date.now()}`, content: diary.trim(), time: date.toISOString() });
     setDiaryVisible(false);
   };
 
@@ -144,7 +175,7 @@ export const CheckInScreen: React.FC = () => {
           <Text style={styles.sectionMeta}>左右滑动查看</Text>
         </View>
         <View style={styles.routineScroller}>
-          <RoutineStatusDashboard activities={activities} bathRecords={bathRecords} />
+          <RoutineStatusDashboard activities={activities} bathRecords={bathRecords} onSelectRoutine={setSelectedRoutine} />
         </View>
 
         <View style={styles.sectionHeader}>
@@ -174,14 +205,14 @@ export const CheckInScreen: React.FC = () => {
 
       <Modal visible={bathVisible} transparent animationType="slide" onRequestClose={() => setBathVisible(false)}>
         <Sheet title="记录洗澡" onClose={() => setBathVisible(false)}>
-          <DateTimePicker value={date} mode="datetime" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={(_, value) => value && setDate(value)} />
+          <DateTimeControl date={date} onChange={setDate} />
           <PrimaryButton label="保存洗澡记录" onPress={() => { addBathRecord(date.toISOString()); setBathVisible(false); }} />
         </Sheet>
       </Modal>
 
       <Modal visible={recordVisible} transparent animationType="slide" onRequestClose={() => setRecordVisible(false)}>
         <Sheet title={`记录${activeAction?.title ?? ''}`} onClose={() => setRecordVisible(false)}>
-          <DateTimePicker value={date} mode="datetime" display={Platform.OS === 'ios' ? 'spinner' : 'default'} onChange={(_, value) => value && setDate(value)} />
+          <DateTimeControl date={date} onChange={setDate} />
           <TextInput value={detail} onChangeText={setDetail} style={styles.input} placeholder={activeAction?.placeholder ?? '写下这次记录的详情（可选）'} placeholderTextColor={colors.textSecondary} />
           <PrimaryButton label="保存记录" onPress={saveActivity} />
         </Sheet>
@@ -189,9 +220,45 @@ export const CheckInScreen: React.FC = () => {
 
       <Modal visible={diaryVisible} transparent animationType="slide" onRequestClose={() => setDiaryVisible(false)}>
         <Sheet title="写一篇小日记" onClose={() => setDiaryVisible(false)}>
+          <DateTimeControl date={date} onChange={setDate} />
           <TextInput value={diary} onChangeText={setDiary} style={[styles.input, styles.diaryInput]} placeholder={`写下今天和${currentPet.name}的片刻...`} placeholderTextColor={colors.textSecondary} multiline autoFocus />
           <PrimaryButton label="保存日记" onPress={saveDiary} />
         </Sheet>
+      </Modal>
+
+      <Modal visible={Boolean(selectedRoutine)} transparent animationType="slide" onRequestClose={() => setSelectedRoutine(null)}>
+        {selectedRoutine ? (
+          <Sheet title={`${selectedRoutine.title}记录`} onClose={() => setSelectedRoutine(null)}>
+            <View style={styles.routineDetailSummary}>
+              <View style={styles.routineDetailItem}>
+                <Text style={styles.routineDetailLabel}>上次记录</Text>
+                <Text style={styles.routineDetailValue}>{selectedRoutine.lastTime ? formatZhDate(selectedRoutine.lastTime) : '暂无'}</Text>
+              </View>
+              <View style={styles.routineDetailItem}>
+                <Text style={styles.routineDetailLabel}>下次建议</Text>
+                <Text style={styles.routineDetailValue}>{getNextRoutineTime(selectedRoutine) ? formatZhDate(getNextRoutineTime(selectedRoutine) as string) : '记录后生成'}</Text>
+              </View>
+            </View>
+            <View style={styles.routineCycleBox}>
+              <Text style={styles.routineCycleTitle}>{selectedRoutine.hint}</Text>
+              <Text style={styles.routineCycleText}>建议周期 {selectedRoutine.cycleDays} 天。首页展示摘要，这里保留完整历史，方便回看和判断下次护理时间。</Text>
+            </View>
+            <Text style={styles.historyTitle}>历史记录</Text>
+            {selectedRoutine.history.length === 0 ? (
+              <View style={styles.historyEmpty}>
+                <Text style={styles.historyEmptyText}>还没有记录。点击底部 + 号可以新增一次{selectedRoutine.title}。</Text>
+              </View>
+            ) : selectedRoutine.history.map((record, index) => (
+              <View key={record.id} style={[styles.historyRow, index > 0 && styles.historyBorder]}>
+                <View style={styles.historyDot} />
+                <View style={styles.historyBody}>
+                  <Text style={styles.historyTime}>{formatZhDateTime(record.time)}</Text>
+                  <Text style={styles.historyMeta}>{record.detail || `${selectedRoutine.title}完成`}</Text>
+                </View>
+              </View>
+            ))}
+          </Sheet>
+        ) : null}
       </Modal>
     </SafeAreaView>
   );
@@ -211,6 +278,48 @@ const Sheet: React.FC<React.PropsWithChildren<{ title: string; onClose: () => vo
 
 const PrimaryButton: React.FC<{ label: string; onPress: () => void }> = ({ label, onPress }) => (
   <Pressable style={styles.primaryButton} onPress={onPress}><Text style={styles.primaryText}>{label}</Text></Pressable>
+);
+
+const DateTimeControl: React.FC<{ date: Date; onChange: (date: Date) => void }> = ({ date, onChange }) => (
+  <View style={styles.dateTimeCard}>
+    <View style={styles.dateTimeHeader}>
+      <View>
+        <Text style={styles.dateTimeTitle}>记录时间</Text>
+        <Text style={styles.dateTimeHint}>{formatZhDateTime(date.toISOString())}</Text>
+      </View>
+      <Pressable style={styles.nowButton} onPress={() => onChange(new Date())}>
+        <Text style={styles.nowButtonText}>现在</Text>
+      </Pressable>
+    </View>
+    <View style={styles.dateTimeInputs}>
+      <View style={styles.dateTimeField}>
+        <Text style={styles.dateTimeLabel}>日期</Text>
+        <TextInput
+          value={toDateInputValue(date)}
+          onChangeText={(value) => onChange(applyDatePart(date, value))}
+          style={styles.dateTimeInput}
+          placeholder="2026-07-30"
+          placeholderTextColor={colors.textMuted}
+        />
+      </View>
+      <View style={styles.dateTimeField}>
+        <Text style={styles.dateTimeLabel}>时间</Text>
+        <TextInput
+          value={toTimeInputValue(date)}
+          onChangeText={(value) => onChange(applyTimePart(date, value))}
+          style={styles.dateTimeInput}
+          placeholder="20:30"
+          placeholderTextColor={colors.textMuted}
+        />
+      </View>
+    </View>
+    <DateTimePicker
+      value={date}
+      mode="datetime"
+      display={Platform.OS === 'ios' ? 'compact' : 'default'}
+      onChange={(_, value) => value && onChange(value)}
+    />
+  </View>
 );
 
 const styles = StyleSheet.create({
@@ -237,6 +346,32 @@ const styles = StyleSheet.create({
   cancel: { color: colors.textSecondary, fontSize: 14, fontWeight: '700' },
   input: { marginTop: spacing(1), minHeight: 52, borderRadius: radius.medium, paddingHorizontal: spacing(1.5), backgroundColor: colors.surface, color: colors.textPrimary, fontSize: 15 },
   diaryInput: { minHeight: 150, paddingTop: spacing(1.5), textAlignVertical: 'top' },
+  dateTimeCard: { marginTop: spacing(0.5), marginBottom: spacing(1), padding: spacing(1.25), borderRadius: radius.medium, borderWidth: 0.5, borderColor: colors.borderSoft, backgroundColor: colors.background },
+  dateTimeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  dateTimeTitle: { color: colors.textPrimary, fontSize: 14, fontWeight: '900' },
+  dateTimeHint: { marginTop: 4, color: colors.textSecondary, fontSize: 11 },
+  nowButton: { minHeight: 32, paddingHorizontal: spacing(1), borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentSoft },
+  nowButtonText: { color: colors.accentStrong, fontSize: 12, fontWeight: '800' },
+  dateTimeInputs: { marginTop: spacing(1.25), flexDirection: 'row', gap: spacing(1) },
+  dateTimeField: { flex: 1 },
+  dateTimeLabel: { marginBottom: 5, color: colors.textSecondary, fontSize: 11, fontWeight: '800' },
+  dateTimeInput: { minHeight: 42, paddingHorizontal: spacing(1), borderRadius: 12, borderWidth: 0.5, borderColor: colors.borderSoft, backgroundColor: colors.card, color: colors.textPrimary, fontSize: 13, fontWeight: '700' },
+  routineDetailSummary: { flexDirection: 'row', gap: spacing(1) },
+  routineDetailItem: { flex: 1, minHeight: 82, padding: spacing(1.25), borderRadius: radius.medium, backgroundColor: colors.surface },
+  routineDetailLabel: { color: colors.textSecondary, fontSize: 11, fontWeight: '800' },
+  routineDetailValue: { marginTop: 8, color: colors.textPrimary, fontSize: 16, fontWeight: '900' },
+  routineCycleBox: { marginTop: spacing(1.25), padding: spacing(1.25), borderRadius: radius.medium, borderWidth: 0.5, borderColor: colors.borderSoft, backgroundColor: colors.card },
+  routineCycleTitle: { color: colors.accentStrong, fontSize: 14, fontWeight: '900' },
+  routineCycleText: { marginTop: 6, color: colors.textSecondary, fontSize: 12, lineHeight: 18 },
+  historyTitle: { marginTop: spacing(2), marginBottom: spacing(0.5), color: colors.textPrimary, fontSize: 15, fontWeight: '900' },
+  historyRow: { minHeight: 58, flexDirection: 'row', alignItems: 'center' },
+  historyBorder: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.borderSoft },
+  historyDot: { width: 8, height: 8, marginRight: spacing(1.25), borderRadius: 4, backgroundColor: colors.accentStrong },
+  historyBody: { flex: 1 },
+  historyTime: { color: colors.textPrimary, fontSize: 13, fontWeight: '800' },
+  historyMeta: { marginTop: 4, color: colors.textSecondary, fontSize: 11 },
+  historyEmpty: { minHeight: 90, borderRadius: radius.medium, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.surface },
+  historyEmptyText: { maxWidth: 260, color: colors.textSecondary, textAlign: 'center', fontSize: 12, lineHeight: 18 },
   primaryButton: { marginTop: spacing(2), minHeight: 52, borderRadius: radius.medium, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accentStrong },
   primaryText: { color: '#FFFFFF', fontSize: 15, fontWeight: '800' },
   quickAddHint: { color: colors.textSecondary, fontSize: 13 },

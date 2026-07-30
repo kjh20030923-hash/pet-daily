@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { ActivityRecord, ActivityType, BathRecord } from '../../types';
 import { colors, radius, shadow, spacing } from '../../theme';
 
@@ -12,6 +12,21 @@ type RoutineDefinition = {
   useBathRecord?: boolean;
 };
 
+export type RoutineHistoryItem = {
+  id: string;
+  time: string;
+  detail?: string;
+};
+
+export type RoutineCardData = RoutineDefinition & {
+  lastTime?: string;
+  days: number;
+  progress: number;
+  state: RoutineState;
+  hint: string;
+  history: RoutineHistoryItem[];
+};
+
 const ROUTINE_DEFINITIONS: RoutineDefinition[] = [
   { id: 'bath', title: '洗澡', cycleDays: 30, useBathRecord: true },
   { id: 'internal', title: '体内驱虫', cycleDays: 90, activityTypes: ['deworm-internal'] },
@@ -22,16 +37,19 @@ const ROUTINE_DEFINITIONS: RoutineDefinition[] = [
 const daysSince = (iso: string) => Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
 
 const getLastActivityTime = (activities: ActivityRecord[], definition: RoutineDefinition) => {
-  const matching = activities.filter((activity) => {
+  const matching = getActivityHistory(activities, definition);
+  return matching[0]?.time;
+};
+
+const getActivityHistory = (activities: ActivityRecord[], definition: RoutineDefinition) =>
+  activities.filter((activity) => {
     if (definition.activityTypes?.includes(activity.type)) return true;
     if (activity.type !== 'deworm') return false;
     const detail = activity.detail ?? '';
     if (definition.id === 'internal') return detail.includes('内') || !detail.includes('外');
     if (definition.id === 'external') return detail.includes('外') || !detail.includes('内');
     return false;
-  });
-  return matching.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())[0]?.time;
-};
+  }).sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime());
 
 const getRoutineState = (days: number, cycleDays: number): RoutineState => {
   if (days > cycleDays) return 'overdue';
@@ -61,15 +79,28 @@ const CircularProgressRing: React.FC<{ progress: number; label: string; color: s
   );
 };
 
-export const RoutineStatusDashboard: React.FC<{ activities: ActivityRecord[]; bathRecords: BathRecord[] }> = ({ activities, bathRecords }) => {
-  const cards = useMemo(() => ROUTINE_DEFINITIONS.map((definition) => {
-    const lastTime = definition.useBathRecord ? bathRecords[0]?.time : getLastActivityTime(activities, definition);
-    if (!lastTime) return { ...definition, lastTime, days: 0, progress: 0, state: 'normal' as RoutineState, hint: '暂无记录' };
+export const RoutineStatusDashboard: React.FC<{
+  activities: ActivityRecord[];
+  bathRecords: BathRecord[];
+  onSelectRoutine?: (routine: RoutineCardData) => void;
+}> = ({ activities, bathRecords, onSelectRoutine }) => {
+  const cards = useMemo<RoutineCardData[]>(() => ROUTINE_DEFINITIONS.map((definition) => {
+    const history = definition.useBathRecord
+      ? [...bathRecords]
+        .sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+        .map((record) => ({ id: record.id, time: record.time, detail: '洗澡护理' }))
+      : getActivityHistory(activities, definition).map((record) => ({
+        id: record.id,
+        time: record.time,
+        detail: record.detail,
+      }));
+    const lastTime = definition.useBathRecord ? history[0]?.time : getLastActivityTime(activities, definition);
+    if (!lastTime) return { ...definition, lastTime, days: 0, progress: 0, state: 'normal', hint: '暂无记录', history };
     const days = daysSince(lastTime);
     const state = getRoutineState(days, definition.cycleDays);
     const remaining = definition.cycleDays - days;
     const hint = state === 'overdue' ? `已逾期 ${Math.abs(remaining)} 天` : state === 'due-soon' ? `即将到期 · 剩 ${remaining} 天` : `距建议日还有 ${remaining} 天`;
-    return { ...definition, lastTime, days, progress: days / definition.cycleDays, state, hint };
+    return { ...definition, lastTime, days, progress: days / definition.cycleDays, state, hint, history };
   }), [activities, bathRecords]);
 
   return (
@@ -77,14 +108,18 @@ export const RoutineStatusDashboard: React.FC<{ activities: ActivityRecord[]; ba
       {cards.map((card) => {
         const accent = card.state === 'overdue' ? colors.danger : card.state === 'due-soon' ? '#C98245' : colors.accentStrong;
         return (
-          <View key={card.id} style={[styles.card, card.state === 'overdue' && styles.cardOverdue]}>
+          <Pressable
+            key={card.id}
+            style={({ pressed }) => [styles.card, card.state === 'overdue' && styles.cardOverdue, pressed && styles.cardPressed]}
+            onPress={() => onSelectRoutine?.(card)}
+          >
             <CircularProgressRing progress={card.progress} label={card.lastTime ? String(card.days) : '--'} color={accent} />
             <View style={styles.copy}>
               <Text style={styles.title}>{card.title}</Text>
               <Text style={[styles.hint, card.state !== 'normal' && { color: accent }]}>{card.hint}</Text>
               <Text style={styles.cycle}>建议周期 {card.cycleDays} 天</Text>
             </View>
-          </View>
+          </Pressable>
         );
       })}
     </ScrollView>
@@ -94,6 +129,7 @@ export const RoutineStatusDashboard: React.FC<{ activities: ActivityRecord[]; ba
 const styles = StyleSheet.create({
   row: { paddingHorizontal: spacing(2.5), paddingVertical: 3, gap: spacing(1.25) },
   card: { width: 228, minHeight: 104, paddingHorizontal: spacing(1.25), borderRadius: radius.large, borderWidth: 0.5, borderColor: colors.borderSoft, flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card, ...shadow.soft },
+  cardPressed: { opacity: 0.72, transform: [{ scale: 0.98 }] },
   cardOverdue: { backgroundColor: '#FFF3F2' },
   ring: { width: 62, height: 62, alignItems: 'center', justifyContent: 'center' },
   ringSegment: { position: 'absolute', width: 3, height: 6, borderRadius: 2 },
